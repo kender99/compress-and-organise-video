@@ -29,26 +29,26 @@ import win32file
 import pytz
 import time
 import subprocess
-import os
-import threading
-from queue import Queue
 
 
 resolution_width ='-X 1280'
-quality = '-q 22'   #somewhere between 22 (low qual and 18 high qual - can be wider range but effect is exponential
+quality = '-q 23'   #somewhere between 22 (low qual and 18 high qual - can be wider range but effect is exponential
 
 handbrakeclie_executable = "C:\\Program Files\\Handbrake\\handbrakecli"
 
 # traverse root directory, and list directories as dirs and files as files
 #os. walk returns at each step dirs (a list of dirs), files (a list of files in dir), root (string - relative pathname of each dir)
+import os
 
-#source_path = "C:\\Users\\kende\\Desktop\\dec 2015"
-#destination_path = "C:\\Users\\kende\\Desktop\\video out"
+#source_path = "C:\\Users\\kende\\Desktop\\minicam"
+#destination_path = "C:\\Users\\kende\\Desktop\\video_out"
 
 source_path = input('Source dir:')
 destination_path = input('Destiation dir:')
 
-
+if source_path == destination_path:
+    print('Source and destination should not be the same folder')
+    quit()
 
 
 
@@ -69,8 +69,8 @@ print('\n\n******************************\n'
       'Attention - This is encoding at {0} width    \n******************* '.format(resolution_width))
 time.sleep(2)
 
-logfile = open(destination_path +'\\video_compress.log','w+')
-logfile.write('Compressing files \n\n')
+logfile = open(destination_path +'\\video_compress.csv','w+')
+logfile.write('file, size_in, size_out, compression, time \n\n')
 
 i= 0
 for root, dirs, files in os.walk(source_path, topdown=False):
@@ -83,13 +83,15 @@ for root, dirs, files in os.walk(source_path, topdown=False):
             os.makedirs(mirror_dir)
 
 
-    logfile_lock = threading.Lock()
-
     for file in files:
         if os.path.splitext(file)[1].lower() in ['.mp4' ,'.m4v','.mov','.mpg','.avi']:
             i=i+1
             source_file = os.path.abspath(root)+'\\'+file
-            logfile.write(source_file)
+            size_in = os.path.getsize(source_file)
+            start_time = time.time()
+
+
+
             st= os.stat(source_file)
             original_file_mtime= st.st_mtime
 
@@ -97,24 +99,31 @@ for root, dirs, files in os.walk(source_path, topdown=False):
             destination_file = os.path.abspath(root)+'\\'+os.path.splitext(file)[0]+'.mp4'
             destination_file= destination_file.replace(source_path,destination_path)
             command_template ="""{handbrakecli} -i "{source_file}" -o "{outfile}" --preset="High Profile" --encoder-preset="Slower" {width} {quality}""".format(handbrakecli=handbrakeclie_executable,source_file=source_file,outfile=destination_file,width=resolution_width,quality= quality)
-            print(command_template)
+            #print(command_template)
 
-
-
-
-
-            ## Subprocess calls Handbrake
+            #Run handbrake
             return_code = subprocess.call(command_template)
+            compression_time = time.time() - start_time
+            size_out = os.path.getsize(destination_file)
+            compression_factor =  (size_out/size_in)
+
+            logfile.write(source_file+',')
+            logfile.write(str(size_in)+',')
+            logfile.write(str(size_out)+',')
+            logfile.write(str(round(compression_factor,2))+',')
+            logfile.write(str(round(compression_time,2))+ 'sec,')
+
+
             if return_code == 1:
                 print('Cound not use handbrake on ',source_file)
-                logfile.write(',error \n')
+                logfile.write('error \n')
             else:
                 try:
                     winddows_touch(destination_file,original_file_mtime)
-                    logfile.write(',success \n')
+                    logfile.write('success \n')
                 except Exception as e:
                     print('Failed to touch file',destination_file,e)
-                    logfile.write(',error \n')
+                    logfile.write('error \n')
 
 
     logfile.close()
